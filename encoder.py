@@ -1,16 +1,14 @@
 import wave, struct
 from keras.models import Model
 from keras.layers import Dense, LSTM, RepeatVector, TimeDistributed, Input
+from keras.losses import mse
+import keras.backend as K
 import keras
 import tensorflow as tf
 import numpy as np
 from functools import reduce
 import sys
-
-# Limit Keras Memory Usage
-config = tf.ConfigProto()
-config.gpu_options.per_process_gpu_memory_fraction = 0.7
-session = tf.Session(config=config)
+import argparse
 
 def dataFromWave(fname):
     """
@@ -71,6 +69,7 @@ def norm(x):
         return 32767
     return x
 
+
 def encode(in_file, out_file):
     """
     Takes in a file path to read (a wav file)
@@ -122,12 +121,12 @@ def encode(in_file, out_file):
     decoder= autoencoder.layers[-2](encoded_input)
     decoder = autoencoder.layers[-1](decoder)
     decoder = Model(encoded_input, decoder)
-    
+
     # Compile the model
     autoencoder.compile('adam', loss='mse')
     
     # Train the model on our encoding frames
-    autoencoder.fit(inputs, inputs, epochs=10)
+    autoencoder.fit(inputs, inputs, epochs=10, shuffle=True)
 
     # Encode the data
     encoded = encoder.predict(inputs)
@@ -162,5 +161,26 @@ def decode(in_file, out_file):
 
     dataToWave(out_file + ".wav", out, chans, samps, width, samp_rate)
 
-encode("files/01.wav", "out")
-decode("out", "fin")
+def main():
+    # Limit Keras Memory Usage to avoid crashes
+    config = tf.ConfigProto()
+    config.gpu_options.per_process_gpu_memory_fraction = 0.7
+    session = tf.Session(config=config)
+
+    # Do command line stuff
+    parser = argparse.ArgumentParser(description='An experimental audio compressor using naive autoencoding.')
+    subparsers = parser.add_subparsers(help='The mode in which to run')
+    encode_parser = subparsers.add_parser('encode', help='Encode a wav file')
+    encode_parser.add_argument('in_file', type=str, help='A wav file to be encoded.')
+    encode_parser.add_argument('out_file', type=str, help='The file path prefix for the encoded output files to be stored.')
+    encode_parser.set_defaults(func=encode)
+    decode_parser = subparsers.add_parser('decode', help='Decode an encoded wav file')
+    decode_parser.add_argument('in_file', type=str, help='The file path prefix where the encoded files are found.')
+    decode_parser.add_argument('out_file', type=str, help='The file path where the decoded wav shoudl be stored.')
+    decode_parser.set_defaults(func=decode)
+    args = parser.parse_args()
+    if args.func == encode or args.func == decode:
+        args.func(args.in_file, args.out_file)
+    
+if __name__=="__main__":
+    main()
